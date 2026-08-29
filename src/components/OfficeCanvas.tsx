@@ -5,9 +5,11 @@ import { Agent, LogEntry } from '../types';
 interface Props {
   onAgentsUpdate: (agents: Agent[]) => void;
   onLog: (log: LogEntry) => void;
+  isEditMode: boolean;
+  editTool: 'wall' | 'desk' | 'delete';
 }
 
-export function OfficeCanvas({ onAgentsUpdate, onLog }: Props) {
+export function OfficeCanvas({ onAgentsUpdate, onLog, isEditMode, editTool }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<OfficeEngine | null>(null);
 
@@ -18,6 +20,13 @@ export function OfficeCanvas({ onAgentsUpdate, onLog }: Props) {
       engineRef.current.onLog = onLog;
     }
   }, [onAgentsUpdate, onLog]);
+
+  useEffect(() => {
+    if (engineRef.current) {
+      engineRef.current.isEditMode = isEditMode;
+      engineRef.current.editTool = editTool;
+    }
+  }, [isEditMode, editTool]);
 
   useEffect(() => {
     if (!containerRef.current) return;

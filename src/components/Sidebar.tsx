@@ -1,5 +1,5 @@
 import { Agent, LogEntry } from '../types';
-import { Activity, Cpu, TerminalSquare, Users } from 'lucide-react';
+import { Activity, Cpu, TerminalSquare, Users, Edit3, Grid, Square, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -10,9 +10,13 @@ export function cn(...inputs: (string | undefined | null | false)[]) {
 interface Props {
   agents: Agent[];
   logs: LogEntry[];
+  isEditMode: boolean;
+  setIsEditMode: (v: boolean) => void;
+  editTool: 'wall' | 'desk' | 'delete';
+  setEditTool: (v: 'wall' | 'desk' | 'delete') => void;
 }
 
-export function Sidebar({ agents, logs }: Props) {
+export function Sidebar({ agents, logs, isEditMode, setIsEditMode, editTool, setEditTool }: Props) {
   const totalTokens = agents.reduce((acc, a) => acc + a.tokens, 0);
   
   return (
@@ -40,9 +44,59 @@ export function Sidebar({ agents, logs }: Props) {
 
         {/* Agentes */}
         <div>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Activity size={14} /> Equipe Online
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <Activity size={14} /> Equipe Online
+            </p>
+            <button 
+              onClick={() => setIsEditMode(!isEditMode)}
+              className={cn(
+                "p-1.5 rounded-md flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase transition-colors",
+                isEditMode ? "bg-indigo-500 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+              )}
+            >
+              <Edit3 size={12} /> {isEditMode ? 'Editing' : 'Edit Map'}
+            </button>
+          </div>
+
+          {isEditMode && (
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-indigo-500/30 mb-4 animate-in fade-in slide-in-from-top-2">
+              <div className="text-[10px] uppercase font-bold text-indigo-400 mb-2">Build Tools</div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => setEditTool('wall')}
+                  className={cn(
+                    "flex flex-col items-center justify-center p-2 rounded border transition-colors",
+                    editTool === 'wall' ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+                  )}
+                >
+                  <Square size={14} className="mb-1" />
+                  <span className="text-[9px] uppercase font-bold">Wall</span>
+                </button>
+                <button
+                  onClick={() => setEditTool('desk')}
+                  className={cn(
+                    "flex flex-col items-center justify-center p-2 rounded border transition-colors",
+                    editTool === 'desk' ? "bg-indigo-500/20 border-indigo-500 text-indigo-300" : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+                  )}
+                >
+                  <Grid size={14} className="mb-1" />
+                  <span className="text-[9px] uppercase font-bold">Desk</span>
+                </button>
+                <button
+                  onClick={() => setEditTool('delete')}
+                  className={cn(
+                    "flex flex-col items-center justify-center p-2 rounded border transition-colors",
+                    editTool === 'delete' ? "bg-red-500/20 border-red-500 text-red-300" : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+                  )}
+                >
+                  <Trash2 size={14} className="mb-1" />
+                  <span className="text-[9px] uppercase font-bold">Erase</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <ul className="space-y-1">
             {agents.map(agent => (
               <li key={agent.id} className="flex items-center justify-between p-2 rounded-md hover:bg-slate-800/50 border border-transparent hover:border-slate-800 transition-colors">

@@ -6,6 +6,9 @@ import { Agent, LogEntry } from './types';
 export default function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editTool, setEditTool] = useState<'wall' | 'desk' | 'delete'>('wall');
 
   const handleAgentsUpdate = useCallback((newAgents: Agent[]) => {
     setAgents(newAgents);
@@ -32,11 +35,23 @@ export default function App() {
         </div>
       </header>
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar agents={agents} logs={logs} />
+        <Sidebar 
+          agents={agents} 
+          logs={logs} 
+          isEditMode={isEditMode}
+          setIsEditMode={setIsEditMode}
+          editTool={editTool}
+          setEditTool={setEditTool}
+        />
         <main className="flex-1 relative bg-slate-950">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:40px_40px] opacity-20 z-0"></div>
           <div className="absolute inset-0 z-10">
-            <OfficeCanvas onAgentsUpdate={handleAgentsUpdate} onLog={handleLog} />
+            <OfficeCanvas 
+              onAgentsUpdate={handleAgentsUpdate} 
+              onLog={handleLog} 
+              isEditMode={isEditMode}
+              editTool={editTool}
+            />
           </div>
         </main>
       </div>

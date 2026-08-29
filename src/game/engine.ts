@@ -6,8 +6,18 @@ export const TILE_SIZE = 32;
 export class OfficeEngine {
   public app: Application;
   private container: Container;
+  private bgGraphics: Graphics;
+  private deskGraphics: Graphics;
   private agentsMap: Map<string, { data: Agent; graphics: Container }> = new Map();
   private rooms: { name: string; x: number; y: number; w: number; h: number; color: number }[] = [];
+  private particles: { graphics: Graphics; x: number; y: number; vx: number; vy: number }[] = [];
+  private tooltipContainer!: Container;
+  private tooltipText!: Text;
+  
+  public isEditMode = false;
+  public editTool: 'wall' | 'desk' | 'delete' = 'wall';
+  private customWalls: {x: number, y: number}[] = [];
+  private customDesks: {x: number, y: number}[] = [];
   
   private isDestroyed = false;
   private isInitialized = false;
@@ -19,6 +29,8 @@ export class OfficeEngine {
   constructor() {
     this.app = new Application();
     this.container = new Container();
+    this.bgGraphics = new Graphics();
+    this.deskGraphics = new Graphics();
   }
 
   public async init(canvas: HTMLCanvasElement) {
@@ -48,6 +60,33 @@ export class OfficeEngine {
     
     this.app.stage.addChild(this.container);
 
+    // Initialize Tooltip
+    this.tooltipContainer = new Container();
+    this.tooltipContainer.visible = false;
+    this.tooltipContainer.zIndex = 1000;
+    
+    const ttBg = new Graphics();
+    this.tooltipText = new Text({ text: '', style: new TextStyle({ fontSize: 10, fill: 0x94A3B8, fontFamily: 'monospace' }) });
+    this.tooltipText.x = 8;
+    this.tooltipText.y = 8;
+    
+    this.tooltipContainer.addChild(ttBg, this.tooltipText);
+    this.app.stage.addChild(this.tooltipContainer);
+
+    // Initialize Particles
+    for (let i = 0; i < 40; i++) {
+      const p = new Graphics();
+      p.rect(0, 0, 2, 2).fill({ color: 0x6366f1, alpha: Math.random() * 0.4 + 0.1 });
+      this.container.addChild(p);
+      this.particles.push({
+        graphics: p,
+        x: Math.random() * 30 * TILE_SIZE,
+        y: Math.random() * 20 * TILE_SIZE,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+      });
+    }
+
     // Center the map a bit (mock camera)
     this.container.x = 40;
     this.container.y = 40;
@@ -71,7 +110,11 @@ export class OfficeEngine {
   }
 
   private drawMap() {
-    const bg = new Graphics();
+    const bg = this.bgGraphics;
+    bg.clear();
+    bg.eventMode = 'static';
+    bg.removeAllListeners();
+    bg.on('pointerdown', this.handleMapClick.bind(this));
     
     // Layout based on brief (simplified)
     this.rooms = [
@@ -89,9 +132,32 @@ export class OfficeEngine {
 
     // Draw Rooms
     this.rooms.forEach(room => {
-      bg.rect(room.x * TILE_SIZE, room.y * TILE_SIZE, room.w * TILE_SIZE, room.h * TILE_SIZE)
-        .fill({ color: room.color })
-        .stroke({ color: 0x334155, width: 2, alignment: 1 });
+      const rx = room.x * TILE_SIZE;
+      const ry = room.y * TILE_SIZE;
+      const rw = room.w * TILE_SIZE;
+      const rh = room.h * TILE_SIZE;
+
+      // Base Floor
+      bg.rect(rx, ry, rw, rh)
+        .fill({ color: room.color });
+
+      // Architectural Walls (Depth simulation)
+      bg.rect(rx, ry, rw, 6).fill({ color: 0x334155 }); // Top Wall
+      bg.rect(rx, ry, 6, rh).fill({ color: 0x334155 }); // Left Wall
+      
+      // Outline
+      bg.rect(rx, ry, rw, rh)
+        .stroke({ color: 0x0F172A, width: 2, alignment: 1 });
+    });
+
+    // Draw Custom Walls
+    this.customWalls.forEach(wall => {
+      const rx = wall.x * TILE_SIZE;
+      const ry = wall.y * TILE_SIZE;
+      bg.rect(rx, ry, TILE_SIZE, TILE_SIZE).fill({ color: 0x1E293B });
+      bg.rect(rx, ry, TILE_SIZE, 6).fill({ color: 0x475569 }); // Top Wall
+      bg.rect(rx, ry, 6, TILE_SIZE).fill({ color: 0x475569 }); // Left Wall
+      bg.rect(rx, ry, TILE_SIZE, TILE_SIZE).stroke({ color: 0x0F172A, width: 2, alignment: 1 });
     });
 
     // Draw Grid Lines (optional for the pixel tilemap look)
@@ -106,10 +172,14 @@ export class OfficeEngine {
       bg.stroke({ color: 0x000000, alpha: 0.1, width: 1 });
     }
 
-    this.container.addChild(bg);
+    if (!this.container.children.includes(bg)) {
+      this.container.addChild(bg);
+    }
 
     // Draw Desks
-    const desks = new Graphics();
+    const desks = this.deskGraphics;
+    desks.clear();
+    
     const deskPositions = [
       { x: 3, y: 2 }, // CEO
       { x: 8, y: 2 }, // Sócio
@@ -117,14 +187,31 @@ export class OfficeEngine {
       { x: 11, y: 8 }, // Marina
       { x: 12, y: 15 }, // Gael
       { x: 18, y: 4 }, // Oráculo
+      ...this.customDesks
     ];
 
     deskPositions.forEach(d => {
-      desks.rect(d.x * TILE_SIZE + 4, d.y * TILE_SIZE + 16, 24, 12)
-           .fill({ color: 0x475569 })
+      const dx = d.x * TILE_SIZE + 4;
+      const dy = d.y * TILE_SIZE + 16;
+      
+      // Desk Base
+      desks.rect(dx, dy, 24, 12)
+           .fill({ color: 0x334155 })
            .stroke({ color: 0x1E293B, width: 2, alignment: 1 });
+           
+      // Monitor / Screen
+      desks.rect(dx + 12, dy + 2, 8, 4).fill({ color: 0x818CF8 });
+      
+      // Keyboard
+      desks.rect(dx + 12, dy + 8, 8, 2).fill({ color: 0x94A3B8 });
+      
+      // Plant / Decoration
+      desks.circle(dx + 4, dy + 6, 3).fill({ color: 0x10B981 });
     });
-    this.container.addChild(desks);
+    
+    if (!this.container.children.includes(desks)) {
+      this.container.addChild(desks);
+    }
 
     // Room Labels
     this.rooms.forEach(room => {
@@ -140,6 +227,31 @@ export class OfficeEngine {
       label.y = room.y * TILE_SIZE + 4;
       this.container.addChild(label);
     });
+  }
+
+  private handleMapClick(e: any) {
+    if (!this.isEditMode) return;
+    
+    const localPos = this.container.toLocal(e.global);
+    const gridX = Math.floor(localPos.x / TILE_SIZE);
+    const gridY = Math.floor(localPos.y / TILE_SIZE);
+
+    if (gridX < 0 || gridX >= 30 || gridY < 0 || gridY >= 20) return;
+
+    if (this.editTool === 'wall') {
+      if (!this.customWalls.some(w => w.x === gridX && w.y === gridY)) {
+        this.customWalls.push({ x: gridX, y: gridY });
+      }
+    } else if (this.editTool === 'desk') {
+      if (!this.customDesks.some(d => d.x === gridX && d.y === gridY)) {
+        this.customDesks.push({ x: gridX, y: gridY });
+      }
+    } else if (this.editTool === 'delete') {
+      this.customWalls = this.customWalls.filter(w => !(w.x === gridX && w.y === gridY));
+      this.customDesks = this.customDesks.filter(d => !(d.x === gridX && d.y === gridY));
+    }
+    
+    this.drawMap();
   }
 
   private setupAgents() {
@@ -185,6 +297,33 @@ export class OfficeEngine {
       agentContainer.x = agent.x * TILE_SIZE + TILE_SIZE / 2;
       agentContainer.y = agent.y * TILE_SIZE + TILE_SIZE / 2;
 
+      // Tooltip Interactivity
+      agentContainer.eventMode = 'static';
+      agentContainer.cursor = 'pointer';
+      
+      agentContainer.on('pointerenter', () => {
+         const currentData = this.agentsMap.get(agent.id)?.data;
+         if (!currentData) return;
+         
+         this.tooltipContainer.visible = true;
+         this.tooltipText.text = `ID: ${currentData.name}\nSETOR: ${currentData.sector}\nTOKENS: ${currentData.tokens}`;
+         
+         const bg = this.tooltipContainer.getChildAt(0) as Graphics;
+         bg.clear();
+         bg.rect(0, 0, this.tooltipText.width + 16, this.tooltipText.height + 16)
+           .fill({ color: 0x0F172A, alpha: 0.95 })
+           .stroke({ color: 0x334155, width: 1, alignment: 1 });
+      });
+      
+      agentContainer.on('pointermove', (e) => {
+         this.tooltipContainer.x = e.global.x + 15;
+         this.tooltipContainer.y = e.global.y + 15;
+      });
+      
+      agentContainer.on('pointerleave', () => {
+         this.tooltipContainer.visible = false;
+      });
+
       this.container.addChild(agentContainer);
       this.agentsMap.set(agent.id, { data: agent, graphics: agentContainer });
     });
@@ -195,6 +334,20 @@ export class OfficeEngine {
   private update(delta: number) {
     const speed = 2 * delta;
     
+    // Update ambient particles
+    this.particles.forEach(p => {
+      p.x += p.vx * delta;
+      p.y += p.vy * delta;
+      
+      if (p.x < 0) p.x = 30 * TILE_SIZE;
+      if (p.x > 30 * TILE_SIZE) p.x = 0;
+      if (p.y < 0) p.y = 20 * TILE_SIZE;
+      if (p.y > 20 * TILE_SIZE) p.y = 0;
+      
+      p.graphics.x = p.x;
+      p.graphics.y = p.y;
+    });
+
     this.agentsMap.forEach(({ data, graphics }) => {
       if (data.targetX !== undefined && data.targetY !== undefined) {
         const tx = data.targetX * TILE_SIZE + TILE_SIZE / 2;
@@ -202,7 +355,9 @@ export class OfficeEngine {
         
         const dx = tx - graphics.x;
         const dy = ty - graphics.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Orthogonal (Manhattan) distance for more robotic, grid-like movement
+        const dist = Math.abs(dx) + Math.abs(dy);
         
         if (dist < speed) {
           graphics.x = tx;
@@ -222,8 +377,12 @@ export class OfficeEngine {
           }
           this.emitUpdate();
         } else {
-          graphics.x += (dx / dist) * speed;
-          graphics.y += (dy / dist) * speed;
+          // L-shaped Orthogonal pathfinding logic
+          if (Math.abs(dx) > 1) {
+            graphics.x += Math.sign(dx) * speed;
+          } else if (Math.abs(dy) > 1) {
+            graphics.y += Math.sign(dy) * speed;
+          }
           
           // Bobbing animation
           graphics.getChildAt(1).y = Math.sin(Date.now() / 100) * 2; // body
